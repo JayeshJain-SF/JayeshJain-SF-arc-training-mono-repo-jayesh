@@ -1,0 +1,131 @@
+---
+name: Terraform
+
+on:                # yamllint disable-line rule:truthy
+  push:
+    branches:
+      - main
+      - master
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  bootstrap:
+    runs-on:
+      - self-hosted
+      - aws-aml-demo-poc
+    env:
+      working-directory: $GITHUB_WORKSPACE
+
+    steps:
+      ## checkout the repo code
+      - uses: actions/checkout@v2
+
+      ## install tfenv for the different supported versions
+      - name: Install tfenv
+        run: ./scripts/dependencies/install-tfenv.sh
+        continue-on-error: false
+
+      ## install aws cli
+      - name: Install AWS CLI
+        run: ./scripts/dependencies/install-aws-cli.sh
+        continue-on-error: false
+
+      ## create aws config using profile
+      - name: Create AWS config
+        run: |
+          aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+          aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+        continue-on-error: false
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.ARC_AML_DEMO_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.ARC_AML_DEMO_AWS_SECRET_ACCESS_KEY }}
+
+      ## Execute terraform apply on bootstrap
+      - name: Terraform Apply Bootstrap
+        id: bootstrap
+        run: |
+          ./terraform-apply.sh -r bootstrap -p
+          ./terraform-apply.sh -r bootstrap -a
+        continue-on-error: true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.ARC_AML_DEMO_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.ARC_AML_DEMO_AWS_SECRET_ACCESS_KEY }}
+
+      - name: Save Bootstrap Artifacts
+        id: bootstrap-output
+        uses: actions/upload-artifact@v3
+        continue-on-error: true
+        with:
+          name: bootstrap-artifact
+          retention-days: 2
+          path: |
+            terraform/bootstrap/terraform.tfstate.d/**/**
+
+  apply:
+    needs:
+      - bootstrap
+    runs-on:
+      - self-hosted
+      - aws-aml-demo-poc
+    env:
+      working-directory: $GITHUB_WORKSPACE
+
+    steps:
+      ## checkout the repo code
+      - uses: actions/checkout@v2
+
+      ## install tfenv for the different supported versions
+      - name: Install tfenv
+        run: ./scripts/dependencies/install-tfenv.sh
+        continue-on-error: false
+
+      ## install aws cli
+      - name: Install AWS CLI
+        run: ./scripts/dependencies/install-aws-cli.sh
+        continue-on-error: false
+
+      ## configure ssh for cloning terraform modules
+      - name: Setup SSH Keys and known_hosts
+        #  Copied from https://github.com/maddox/actions/blob/master/ssh/entrypoint.sh
+        run: |
+          SSH_PATH="$HOME/.ssh"
+          mkdir -p "$SSH_PATH"
+          touch "$SSH_PATH/known_hosts"
+          echo "$PRIVATE_KEY" > "$SSH_PATH/id_rsa"
+          chmod 700 "$SSH_PATH"
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          chmod 600 "$SSH_PATH/known_hosts"
+          chmod 400 "$SSH_PATH/id_rsa"
+          eval $(ssh-agent)
+          ssh-add "$SSH_PATH/id_rsa"
+        continue-on-error: false
+        env:
+          PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      ## create aws config using profile
+      - name: Create AWS config
+        run: |
+          aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+          aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+        continue-on-error: false
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.ARC_AML_DEMO_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.ARC_AML_DEMO_AWS_SECRET_ACCESS_KEY }}
+
+      - name: Terraform Recursive Apply
+        run: |
+          ./terraform-apply.sh -r network -p
+          ./terraform-apply.sh -r network -a
+          ./terraform-apply.sh -r db -p
+          ./terraform-apply.sh -r db -a
+          ./terraform-apply.sh -r ecr -p
+          ./terraform-apply.sh -r ecr -a
+          ./terraform-apply.sh -r eks -p
+          ./terraform-apply.sh -r eks -a
+        continue-on-error: false
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.ARC_AML_DEMO_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.ARC_AML_DEMO_AWS_SECRET_ACCESS_KEY }}
