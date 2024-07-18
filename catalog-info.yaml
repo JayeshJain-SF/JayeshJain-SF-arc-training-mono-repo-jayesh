@@ -1,0 +1,22 @@
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: "test-arc"
+  description: "Mono Repo for ARC Training"
+  namespace: "arc"
+  annotations:
+    github.com/project-slug: sourcefuse/arc-training-mono-infra
+    backstage.io/techdocs-ref: url:https://github.com/sourcefuse/arc-docs/tree/main
+
+spec:
+  type: service
+  lifecycle: experimental
+  owner: sourcefuse
+  dependsOn:
+    - component:arc/terraform-aws-ref-arch-db
+    - component:arc/terraform-aws-ref-arch-network
+    - component:arc/terraform-aws-refarch-tags
+    - component:arc/terraform-module-aws-bootstrap
+    - component:arc/terraform-module-aws-eks
+    - component:arc/terraform-k8s-app

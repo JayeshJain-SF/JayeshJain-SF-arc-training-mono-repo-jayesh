@@ -1,0 +1,11 @@
+---
+site_name: "test-arc"
+site_description: "Mono Repo for ARC Training"
+
+docs_dir: ./terraform
+
+nav:
+  - Introduction: index.md
+
+plugins:
+  - techdocs-core
